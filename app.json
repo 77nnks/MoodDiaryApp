@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "気分日記",
+    "slug": "MoodDiaryApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "mooddiary",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4ECDC4"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mooddiary.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4ECDC4"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.mooddiary.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
