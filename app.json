@@ -6,7 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "scheme": "mooddiary",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -22,7 +21,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4ECDC4"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.mooddiary.app"
     },
     "web": {
