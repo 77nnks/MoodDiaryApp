@@ -4,9 +4,20 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Animated,
+  Dimensions,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  interpolate,
+} from 'react-native-reanimated';
 import { MoodOption, MoodLevel, MOOD_OPTIONS } from '../types';
+import { colors, borderRadius, fontSize, fontWeight, getMoodColor, getMoodColorDark } from '../lib/theme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const BUTTON_SIZE = (SCREEN_WIDTH - 80) / 5; // 5つのボタンを横並び
 
 interface MoodSelectorProps {
   selectedLevel?: MoodLevel;
@@ -21,51 +32,85 @@ interface MoodButtonProps {
   disabled?: boolean;
 }
 
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
 const MoodButton: React.FC<MoodButtonProps> = ({
   option,
   isSelected,
   onPress,
   disabled,
 }) => {
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const pressed = useSharedValue(0);
+  const selected = useSharedValue(isSelected ? 1 : 0);
+
+  React.useEffect(() => {
+    selected.value = withSpring(isSelected ? 1 : 0, { damping: 15, stiffness: 150 });
+  }, [isSelected]);
+
+  const buttonColor = getMoodColor(option.level);
+  const buttonColorDark = getMoodColorDark(option.level);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const scale = interpolate(pressed.value, [0, 1], [1, 0.95]);
+    const translateY = interpolate(pressed.value, [0, 1], [0, 4]);
+
+    return {
+      transform: [{ scale }, { translateY }],
+    };
+  });
+
+  const bottomBorderStyle = useAnimatedStyle(() => {
+    const height = interpolate(pressed.value, [0, 1], [6, 2]);
+    return {
+      height,
+    };
+  });
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.9,
-      useNativeDriver: true,
-    }).start();
+    pressed.value = withTiming(1, { duration: 100 });
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 3,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
+    pressed.value = withSpring(0, { damping: 15, stiffness: 200 });
   };
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      disabled={disabled}
-      activeOpacity={0.8}
-    >
+    <View style={styles.buttonWrapper}>
+      {/* 底部の暗い影（Duolingo風） */}
       <Animated.View
         style={[
+          styles.buttonShadow,
+          { backgroundColor: buttonColorDark },
+          bottomBorderStyle,
+        ]}
+      />
+
+      <AnimatedTouchable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={disabled}
+        activeOpacity={1}
+        style={[
           styles.moodButton,
+          { backgroundColor: buttonColor },
           isSelected && styles.moodButtonSelected,
-          { transform: [{ scale: scaleAnim }] },
+          animatedStyle,
         ]}
       >
         <Text style={styles.emoji}>{option.emoji}</Text>
-        <Text style={[styles.label, isSelected && styles.labelSelected]}>
-          {option.label}
-        </Text>
-      </Animated.View>
-    </TouchableOpacity>
+      </AnimatedTouchable>
+
+      {/* ラベル */}
+      <Text style={[styles.label, isSelected && styles.labelSelected]}>
+        {option.label}
+      </Text>
+
+      {/* 選択インジケーター */}
+      {isSelected && (
+        <View style={[styles.selectedIndicator, { backgroundColor: buttonColor }]} />
+      )}
+    </View>
   );
 };
 
@@ -76,54 +121,80 @@ export const MoodSelector: React.FC<MoodSelectorProps> = ({
 }) => {
   return (
     <View style={styles.container}>
-      {MOOD_OPTIONS.map((option) => (
-        <MoodButton
-          key={option.level}
-          option={option}
-          isSelected={selectedLevel === option.level}
-          onPress={() => onSelect(option.level)}
-          disabled={disabled}
-        />
-      ))}
+      <Text style={styles.title}>今日の気分は？</Text>
+      <View style={styles.buttonsRow}>
+        {MOOD_OPTIONS.map((option) => (
+          <MoodButton
+            key={option.level}
+            option={option}
+            isSelected={selectedLevel === option.level}
+            onPress={() => onSelect(option.level)}
+            disabled={disabled}
+          />
+        ))}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingHorizontal: 10,
     paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  title: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  buttonWrapper: {
+    alignItems: 'center',
+    width: BUTTON_SIZE + 10,
+  },
+  buttonShadow: {
+    position: 'absolute',
+    top: BUTTON_SIZE - 6,
+    width: BUTTON_SIZE,
+    height: 6,
+    borderRadius: borderRadius.lg,
   },
   moodButton: {
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: '#F5F5F5',
-    minWidth: 60,
+    zIndex: 1,
   },
   moodButtonSelected: {
-    backgroundColor: '#4ECDC4',
-    shadowColor: '#4ECDC4',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: 4,
+    borderColor: colors.card,
   },
   emoji: {
-    fontSize: 36,
-    marginBottom: 4,
+    fontSize: BUTTON_SIZE * 0.55,
   },
   label: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.semibold,
+    color: colors.text.secondary,
+    marginTop: 12,
+    textAlign: 'center',
   },
   labelSelected: {
-    color: '#FFF',
-    fontWeight: '700',
+    color: colors.text.primary,
+    fontWeight: fontWeight.bold,
+  },
+  selectedIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 6,
   },
 });
