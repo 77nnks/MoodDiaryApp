@@ -3,17 +3,88 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { SurfWave } from '../../components/SurfWave';
 import { getMonthMoods, getYearMonthlyAverages } from '../../lib/mood';
 import { MoodEntry } from '../../types';
+import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../lib/theme';
 import { ja } from '../../i18n/ja';
 
 type ViewMode = 'month' | 'year';
+
+// Duolingo風トグルボタン
+const ViewToggle: React.FC<{
+  viewMode: ViewMode;
+  onChange: (mode: ViewMode) => void;
+}> = ({ viewMode, onChange }) => {
+  const indicatorPosition = useSharedValue(viewMode === 'month' ? 0 : 1);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorPosition.value * 120 }],
+  }));
+
+  const handlePress = (mode: ViewMode) => {
+    indicatorPosition.value = withSpring(mode === 'month' ? 0 : 1, {
+      damping: 15,
+      stiffness: 150,
+    });
+    onChange(mode);
+  };
+
+  return (
+    <View style={styles.toggleContainer}>
+      <Animated.View style={[styles.toggleIndicator, indicatorStyle]} />
+      <TouchableOpacity
+        style={styles.toggleButton}
+        onPress={() => handlePress('month')}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.toggleText, viewMode === 'month' && styles.toggleTextActive]}>
+          {ja.surf.monthView}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.toggleButton}
+        onPress={() => handlePress('year')}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.toggleText, viewMode === 'year' && styles.toggleTextActive]}>
+          {ja.surf.yearView}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// ナビゲーションボタン
+const NavButton: React.FC<{ direction: 'left' | 'right'; onPress: () => void }> = ({ direction, onPress }) => {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      onPressIn={() => { scale.value = withSpring(0.9); }}
+      onPressOut={() => { scale.value = withSpring(1); }}
+      activeOpacity={1}
+    >
+      <Animated.View style={[styles.navButton, animatedStyle]}>
+        <Text style={styles.navButtonText}>{direction === 'left' ? '◀' : '▶'}</Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
 
 export default function SurfScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -91,180 +162,198 @@ export default function SurfScreen() {
     }
   };
 
-  const periodLabel = viewMode === 'month' ? `${year}年 ${month}月` : `${year}年`;
+  const periodLabel = viewMode === 'month' ? `${month}月` : `${year}年`;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* ビュー切り替えタブ */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'month' && styles.tabActive]}
-          onPress={() => setViewMode('month')}
-        >
-          <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
-            {ja.surf.monthView}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'year' && styles.tabActive]}
-          onPress={() => setViewMode('year')}
-        >
-          <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
-            {ja.surf.yearView}
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.toggleWrapper}>
+        <ViewToggle viewMode={viewMode} onChange={setViewMode} />
       </View>
 
       {/* 期間選択 */}
       <View style={styles.periodSelector}>
-        <TouchableOpacity onPress={goToPrev} style={styles.navButton}>
-          <Text style={styles.navButtonText}>◀</Text>
-        </TouchableOpacity>
-        <Text style={styles.periodLabel}>{periodLabel}</Text>
-        <TouchableOpacity onPress={goToNext} style={styles.navButton}>
-          <Text style={styles.navButtonText}>▶</Text>
-        </TouchableOpacity>
+        <NavButton direction="left" onPress={goToPrev} />
+        <View style={styles.periodContainer}>
+          {viewMode === 'month' && <Text style={styles.yearText}>{year}年</Text>}
+          <Text style={styles.periodLabel}>{periodLabel}</Text>
+        </View>
+        <NavButton direction="right" onPress={goToNext} />
       </View>
 
       {isLoading ? (
-        <ActivityIndicator size="large" color="#4ECDC4" style={styles.loader} />
+        <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <>
           {/* サーフィン波グラフ */}
-          <SurfWave
-            data={viewMode === 'month' ? monthData : yearData}
-            title={
-              viewMode === 'month'
-                ? `${month}月の気分の波 🌊`
-                : `${year}年の気分の波 🌊`
-            }
-            showSurfer
-          />
+          <View style={styles.waveContainer}>
+            <SurfWave
+              data={viewMode === 'month' ? monthData : yearData}
+              title={
+                viewMode === 'month'
+                  ? `${month}月の気分の波`
+                  : `${year}年の気分の波`
+              }
+              showSurfer
+            />
+          </View>
 
-          {/* 説明 */}
-          <View style={styles.descriptionContainer}>
-            <Text style={styles.descriptionTitle}>🏄 サーフィンの見方</Text>
-            <Text style={styles.descriptionText}>
+          {/* 説明カード */}
+          <View style={styles.infoCard}>
+            <View style={styles.infoHeader}>
+              <Text style={styles.infoEmoji}>🏄</Text>
+              <Text style={styles.infoTitle}>サーフィンの見方</Text>
+            </View>
+            <Text style={styles.infoText}>
               あなたの気分が波になりました！{'\n'}
-              気分が良い日は大きな波、{'\n'}
-              気分が悪い日は小さな波として表示されます。{'\n'}
-              {'\n'}
-              サーファー🏄は一番気分が良かった日に乗っています！
+              気分が良い日は大きな波、気分が悪い日は小さな波として表示されます。
             </Text>
           </View>
 
-          {/* ティップス */}
-          <View style={styles.tipsContainer}>
-            <Text style={styles.tipsTitle}>💡 ヒント</Text>
+          {/* ティップスカード */}
+          <View style={styles.tipsCard}>
+            <View style={styles.infoHeader}>
+              <Text style={styles.infoEmoji}>💡</Text>
+              <Text style={styles.tipsTitle}>ヒント</Text>
+            </View>
             <Text style={styles.tipsText}>
-              毎日の気分を記録して、自分の波を観察しよう。{'\n'}
+              毎日の気分を記録して、自分の波を観察しよう。
               波の流れを見ることで、自分のリズムが見えてくるかも？
             </Text>
           </View>
-        </ScrollView>
+        </>
       )}
-    </SafeAreaView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FFFE',
+    backgroundColor: colors.background,
   },
-  tabContainer: {
+  contentContainer: {
+    paddingBottom: 120,
+  },
+  toggleWrapper: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  toggleContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-    marginTop: 10,
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
     padding: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    position: 'relative',
+    ...shadows.md,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
+  toggleIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 120,
+    height: 44,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
+  },
+  toggleButton: {
+    width: 120,
+    height: 44,
     alignItems: 'center',
-    borderRadius: 10,
+    justifyContent: 'center',
+    zIndex: 1,
   },
-  tabActive: {
-    backgroundColor: '#4ECDC4',
+  toggleText: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+    color: colors.text.secondary,
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  tabTextActive: {
-    color: '#FFF',
+  toggleTextActive: {
+    color: colors.text.white,
+    fontWeight: fontWeight.bold,
   },
   periodSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
   },
   navButton: {
-    padding: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.md,
   },
   navButtonText: {
-    fontSize: 18,
-    color: '#4ECDC4',
+    fontSize: fontSize.lg,
+    color: colors.primary,
+  },
+  periodContainer: {
+    alignItems: 'center',
+  },
+  yearText: {
+    fontSize: fontSize.sm,
+    color: colors.text.white,
+    opacity: 0.8,
   },
   periodLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: fontSize.xxl,
+    fontWeight: fontWeight.bold,
+    color: colors.text.white,
   },
   loader: {
     marginTop: 50,
   },
-  scrollContent: {
-    padding: 20,
-    paddingTop: 0,
+  waveContainer: {
+    paddingHorizontal: spacing.lg,
   },
-  descriptionContainer: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+  infoCard: {
+    backgroundColor: colors.card,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    borderRadius: borderRadius.xxl,
+    padding: spacing.lg,
+    ...shadows.md,
   },
-  descriptionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 12,
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  descriptionText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 22,
+  infoEmoji: {
+    fontSize: fontSize.xl,
+    marginRight: spacing.sm,
   },
-  tipsContainer: {
-    backgroundColor: '#FFE66D',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 16,
+  infoTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.text.primary,
+  },
+  infoText: {
+    fontSize: fontSize.md,
+    color: colors.text.secondary,
+    lineHeight: 24,
+  },
+  tipsCard: {
+    backgroundColor: colors.accent.yellow,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderRadius: borderRadius.xxl,
+    padding: spacing.lg,
+    ...shadows.md,
   },
   tipsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.text.dark,
   },
   tipsText: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 22,
+    fontSize: fontSize.md,
+    color: colors.text.dark,
+    lineHeight: 24,
   },
 });
