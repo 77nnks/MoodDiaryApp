@@ -475,73 +475,171 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
             );
           })}
 
-          {/* 手書き風サーファー */}
+          {/* クロミ風キャラクター（黒ウサギ）サーファー */}
           {showSurfer && (
             <G
               transform={`translate(${surferPos.x}, ${surferPos.y}) rotate(${surferAngle}) scale(${surferScale})`}
             >
               {/* 影 */}
-              <Ellipse cx={0} cy={20} rx={20} ry={6} fill="#000" fillOpacity={0.1} />
+              <Ellipse cx={0} cy={22} rx={22} ry={6} fill="#000" fillOpacity={0.15} />
 
-              {/* サーフボード（手書き風） */}
+              {/* サーフボード（ピンク×黒） */}
               <Path
-                d={`M -25 10 Q -28 8 -25 6 L 25 6 Q 28 8 25 10 L -25 10`}
-                fill="#FFE082"
-                stroke="#E6A800"
+                d={`M -28 12 Q -32 10 -28 8 L 28 8 Q 32 10 28 12 L -28 12`}
+                fill="#FF69B4"
+                stroke="#333"
                 strokeWidth={2}
               />
-              <SketchyLine x1={-18} y1={8} x2={18} y2={8} stroke="#FF7043" strokeWidth={2} wobble={1} />
+              {/* サーフボードのドクロマーク風 */}
+              <Circle cx={0} cy={10} r={3} fill="#333" />
+              <SketchyLine x1={-20} y1={10} x2={-8} y2={10} stroke="#333" strokeWidth={2} wobble={1} />
+              <SketchyLine x1={8} y1={10} x2={20} y2={10} stroke="#333" strokeWidth={2} wobble={1} />
 
-              {/* 体（手書き風の棒人間スタイル） */}
-              {/* 頭 */}
-              <SketchyCircle cx={0} cy={-15} r={10} fill="#FFCCAA" stroke="#CC8866" strokeWidth={2} wobble={2} />
-
-              {/* 髪の毛（手書き風） */}
+              {/* ウサギの耳（黒フード風）- 左 */}
               <Path
-                d={`M -7 -22 Q ${-3 + getWobble(2)} ${-28 + getWobble(2)} 0 -25 Q ${3 + getWobble(2)} ${-28 + getWobble(2)} 7 -22`}
-                fill="#553322"
-                stroke="#442211"
+                d={`M -12 -25
+                   Q ${-14 + getWobble(1)} ${-45 + getWobble(2)} ${-8 + getWobble(1)} -50
+                   Q ${-2 + getWobble(1)} ${-48 + getWobble(1)} -4 -28`}
+                fill="#2D2D2D"
+                stroke="#1A1A1A"
+                strokeWidth={2}
+              />
+              {/* 耳の内側（ピンク）- 左 */}
+              <Path
+                d={`M -10 -28
+                   Q ${-11 + getWobble(0.5)} ${-40 + getWobble(1)} ${-7 + getWobble(0.5)} -44
+                   Q ${-4 + getWobble(0.5)} ${-42 + getWobble(0.5)} -5 -30`}
+                fill="#FF69B4"
+                stroke="none"
+              />
+
+              {/* ウサギの耳（黒フード風）- 右 */}
+              <Path
+                d={`M 12 -25
+                   Q ${14 + getWobble(1)} ${-45 + getWobble(2)} ${8 + getWobble(1)} -50
+                   Q ${2 + getWobble(1)} ${-48 + getWobble(1)} 4 -28`}
+                fill="#2D2D2D"
+                stroke="#1A1A1A"
+                strokeWidth={2}
+              />
+              {/* 耳の内側（ピンク）- 右 */}
+              <Path
+                d={`M 10 -28
+                   Q ${11 + getWobble(0.5)} ${-40 + getWobble(1)} ${7 + getWobble(0.5)} -44
+                   Q ${4 + getWobble(0.5)} ${-42 + getWobble(0.5)} 5 -30`}
+                fill="#FF69B4"
+                stroke="none"
+              />
+
+              {/* 顔（白） */}
+              <SketchyCircle cx={0} cy={-12} r={14} fill="#FFFFFF" stroke="#333" strokeWidth={2} wobble={2} />
+
+              {/* フード部分（黒・頭の上半分を覆う） */}
+              <Path
+                d={`M -14 -15
+                   Q -15 -25 -10 -28
+                   L -4 -28 L 4 -28 L 10 -28
+                   Q 15 -25 14 -15
+                   Q 10 -20 0 -22
+                   Q -10 -20 -14 -15`}
+                fill="#2D2D2D"
+                stroke="#1A1A1A"
                 strokeWidth={1}
               />
 
-              {/* 目（手書き風の点） */}
-              <Circle cx={-4} cy={-16} r={2} fill="#333" />
-              <Circle cx={4} cy={-16} r={2} fill="#333" />
+              {/* 目（大きくてキラキラ） */}
+              {/* 左目 */}
+              <Ellipse cx={-5} cy={-12} rx={4} ry={5} fill="#333" />
+              <Circle cx={-6} cy={-14} r={1.5} fill="#FFF" />
+              <Circle cx={-4} cy={-11} r={0.8} fill="#FFF" />
+              {/* 右目 */}
+              <Ellipse cx={5} cy={-12} rx={4} ry={5} fill="#333" />
+              <Circle cx={4} cy={-14} r={1.5} fill="#FFF" />
+              <Circle cx={6} cy={-11} r={0.8} fill="#FFF" />
 
-              {/* 口（笑顔） */}
+              {/* 眉毛（いたずらっぽく） */}
               <Path
-                d={`M -4 -10 Q 0 ${isAnimating ? -6 : -8} 4 -10`}
+                d={`M -9 -18 Q -6 ${isAnimating ? -20 : -19} -2 -18`}
+                stroke="#333"
+                strokeWidth={1.5}
+                fill="none"
+              />
+              <Path
+                d={`M 9 -18 Q 6 ${isAnimating ? -20 : -19} 2 -18`}
                 stroke="#333"
                 strokeWidth={1.5}
                 fill="none"
               />
 
-              {/* 胴体（手書き風） */}
-              <SketchyLine x1={0} y1={-5} x2={0} y2={5} stroke="#4488CC" strokeWidth={8} wobble={1} />
-
-              {/* 腕（手書き風） */}
-              <SketchyLine
-                x1={-2}
-                y1={-2}
-                x2={isAnimating ? -18 : -12}
-                y2={isAnimating ? -10 : 2}
-                stroke="#FFCCAA"
-                strokeWidth={4}
-                wobble={2}
+              {/* 口（ニヤリ） */}
+              <Path
+                d={`M -4 -5 Q 0 ${isAnimating ? 0 : -2} 4 -5`}
+                stroke="#333"
+                strokeWidth={2}
+                fill="none"
               />
-              <SketchyLine
-                x1={2}
-                y1={-2}
-                x2={isAnimating ? 18 : 12}
-                y2={isAnimating ? -10 : 2}
-                stroke="#FFCCAA"
-                strokeWidth={4}
-                wobble={2}
+              {/* いたずらっぽい牙 */}
+              <Path
+                d={`M -2 -5 L -1 -2`}
+                stroke="#333"
+                strokeWidth={1.5}
+                fill="none"
               />
 
-              {/* 足（手書き風） */}
-              <SketchyLine x1={-2} y1={5} x2={-6} y2={12} stroke="#FFCCAA" strokeWidth={4} wobble={1} />
-              <SketchyLine x1={2} y1={5} x2={6} y2={12} stroke="#FFCCAA" strokeWidth={4} wobble={1} />
+              {/* 頬（ピンク） */}
+              <Ellipse cx={-10} cy={-8} rx={3} ry={2} fill="#FFB6C1" fillOpacity={0.7} />
+              <Ellipse cx={10} cy={-8} rx={3} ry={2} fill="#FFB6C1" fillOpacity={0.7} />
+
+              {/* 体（黒い服） */}
+              <Path
+                d={`M -8 2 L -10 8 L 10 8 L 8 2 Q 0 0 -8 2`}
+                fill="#2D2D2D"
+                stroke="#1A1A1A"
+                strokeWidth={1}
+              />
+              {/* ドクロマーク風の装飾 */}
+              <Circle cx={0} cy={5} r={2} fill="#FF69B4" />
+
+              {/* 腕（黒い袖から白い手） */}
+              <SketchyLine
+                x1={-8}
+                y1={3}
+                x2={isAnimating ? -20 : -14}
+                y2={isAnimating ? -5 : 5}
+                stroke="#2D2D2D"
+                strokeWidth={5}
+                wobble={1}
+              />
+              <SketchyCircle
+                cx={isAnimating ? -22 : -16}
+                cy={isAnimating ? -6 : 6}
+                r={3}
+                fill="#FFF"
+                stroke="#333"
+                strokeWidth={1}
+                wobble={1}
+              />
+              <SketchyLine
+                x1={8}
+                y1={3}
+                x2={isAnimating ? 20 : 14}
+                y2={isAnimating ? -5 : 5}
+                stroke="#2D2D2D"
+                strokeWidth={5}
+                wobble={1}
+              />
+              <SketchyCircle
+                cx={isAnimating ? 22 : 16}
+                cy={isAnimating ? -6 : 6}
+                r={3}
+                fill="#FFF"
+                stroke="#333"
+                strokeWidth={1}
+                wobble={1}
+              />
+
+              {/* しっぽ（ピンクのポンポン） */}
+              <SketchyCircle cx={-5} cy={10} r={4} fill="#FF69B4" stroke="#FF1493" strokeWidth={1} wobble={2} />
             </G>
           )}
 
@@ -584,7 +682,7 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
         </Svg>
       </TouchableOpacity>
 
-      <Text style={styles.hint}>タップでサーファー再スタート 🏄‍♂️</Text>
+      <Text style={styles.hint}>タップで再スタート 🖤🐰</Text>
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
