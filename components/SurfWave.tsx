@@ -1,5 +1,5 @@
-import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, TouchableOpacity, Easing } from 'react-native';
+import React, { useMemo, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import Svg, {
   Path,
   Circle,
@@ -10,8 +10,26 @@ import Svg, {
   Stop,
   Ellipse,
   Rect,
-  Line,
 } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedProps,
+  withTiming,
+  withRepeat,
+  withSequence,
+  withDelay,
+  Easing,
+  useDerivedValue,
+  interpolate,
+  runOnJS,
+} from 'react-native-reanimated';
+import LottieView from 'lottie-react-native';
+
+// Animated SVG コンポーネントを作成
+const AnimatedG = Animated.createAnimatedComponent(G);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 
 interface SurfWaveProps {
   data: { label: string; value: number }[];
@@ -26,36 +44,13 @@ const PADDING = 30;
 const SKY_HEIGHT = 70;
 const ANIMATION_DURATION = 6000;
 
-// 手書き風のランダムオフセットを生成
-const getWobble = (intensity: number = 2) => {
-  return (Math.random() - 0.5) * intensity;
+// 手書き風のランダムオフセット（worklet対応）
+const getWobbleStatic = (seed: number, intensity: number = 2): number => {
+  'worklet';
+  return Math.sin(seed * 12.9898) * intensity - intensity / 2;
 };
 
-// 手書き風のパスを生成（ボイリングエフェクト用）
-const getSketchyPath = (points: {x: number, y: number}[], wobbleIntensity: number = 2): string => {
-  if (points.length < 2) return '';
-
-  let path = `M ${points[0].x + getWobble(wobbleIntensity)} ${points[0].y + getWobble(wobbleIntensity)}`;
-
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-
-    // 手書き風にベジェ曲線で繋ぐ（ランダムな揺らぎを加える）
-    const cpX1 = prev.x + (curr.x - prev.x) * 0.3 + getWobble(wobbleIntensity);
-    const cpY1 = prev.y + getWobble(wobbleIntensity * 1.5);
-    const cpX2 = prev.x + (curr.x - prev.x) * 0.7 + getWobble(wobbleIntensity);
-    const cpY2 = curr.y + getWobble(wobbleIntensity * 1.5);
-    const endX = curr.x + getWobble(wobbleIntensity);
-    const endY = curr.y + getWobble(wobbleIntensity);
-
-    path += ` C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${endX} ${endY}`;
-  }
-
-  return path;
-};
-
-// 手書き風の円を生成
+// 手書き風の円（静的）
 const SketchyCircle: React.FC<{
   cx: number;
   cy: number;
@@ -63,22 +58,24 @@ const SketchyCircle: React.FC<{
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
-  wobble?: number;
-}> = ({ cx, cy, r, fill = 'none', stroke = '#333', strokeWidth = 2, wobble = 2 }) => {
-  const points: {x: number, y: number}[] = [];
+  seed?: number;
+}> = ({ cx, cy, r, fill = 'none', stroke = '#333', strokeWidth = 2, seed = 0 }) => {
+  const points: string[] = [];
   const segments = 12;
 
   for (let i = 0; i <= segments; i++) {
     const angle = (i / segments) * Math.PI * 2;
-    const radiusWobble = r + getWobble(wobble);
-    points.push({
-      x: cx + Math.cos(angle) * radiusWobble + getWobble(wobble),
-      y: cy + Math.sin(angle) * radiusWobble + getWobble(wobble),
-    });
+    const radiusWobble = r + getWobbleStatic(seed + i, 2);
+    const px = cx + Math.cos(angle) * radiusWobble + getWobbleStatic(seed + i + 100, 2);
+    const py = cy + Math.sin(angle) * radiusWobble + getWobbleStatic(seed + i + 200, 2);
+    if (i === 0) {
+      points.push(`M ${px} ${py}`);
+    } else {
+      points.push(`L ${px} ${py}`);
+    }
   }
 
-  const path = getSketchyPath(points, wobble);
-  return <Path d={path + ' Z'} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+  return <Path d={points.join(' ') + ' Z'} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
 };
 
 // 手書き風の線
@@ -89,13 +86,13 @@ const SketchyLine: React.FC<{
   y2: number;
   stroke?: string;
   strokeWidth?: number;
-  wobble?: number;
-}> = ({ x1, y1, x2, y2, stroke = '#333', strokeWidth = 2, wobble = 3 }) => {
-  const midX = (x1 + x2) / 2 + getWobble(wobble * 2);
-  const midY = (y1 + y2) / 2 + getWobble(wobble * 2);
+  seed?: number;
+}> = ({ x1, y1, x2, y2, stroke = '#333', strokeWidth = 2, seed = 0 }) => {
+  const midX = (x1 + x2) / 2 + getWobbleStatic(seed, 4);
+  const midY = (y1 + y2) / 2 + getWobbleStatic(seed + 50, 4);
 
-  const path = `M ${x1 + getWobble(wobble)} ${y1 + getWobble(wobble)}
-                Q ${midX} ${midY} ${x2 + getWobble(wobble)} ${y2 + getWobble(wobble)}`;
+  const path = `M ${x1 + getWobbleStatic(seed + 1, 2)} ${y1 + getWobbleStatic(seed + 2, 2)}
+                Q ${midX} ${midY} ${x2 + getWobbleStatic(seed + 3, 2)} ${y2 + getWobbleStatic(seed + 4, 2)}`;
 
   return <Path d={path} stroke={stroke} strokeWidth={strokeWidth} fill="none" strokeLinecap="round" />;
 };
@@ -105,15 +102,16 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
   title,
   showSurfer = true,
 }) => {
-  const animationProgress = useRef(new Animated.Value(0)).current;
-  const boilingAnim = useRef(new Animated.Value(0)).current;
+  // Reanimated shared values（60fps ネイティブアニメーション）
+  const animationProgress = useSharedValue(0);
+  const boilingFrame = useSharedValue(0);
+  const cloudOffset = useSharedValue(0);
+  const seagullOffset = useSharedValue(0);
+  const isAnimating = useSharedValue(false);
 
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [surferPos, setSurferPos] = useState({ x: PADDING, y: CHART_HEIGHT / 2 });
-  const [surferAngle, setSurferAngle] = useState(0);
-  const [surferScale, setSurferScale] = useState(1);
-  const [boilingFrame, setBoilingFrame] = useState(0);
-  const [splashes, setSplashes] = useState<{x: number, y: number, size: number, opacity: number, vx: number, vy: number}[]>([]);
+  // 波しぶきの状態
+  const [splashes, setSplashes] = React.useState<{id: number, x: number, y: number}[]>([]);
+  const splashIdRef = React.useRef(0);
 
   // 波のデータを計算
   const { wavePoints, hasData } = useMemo(() => {
@@ -141,11 +139,129 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
     return { wavePoints: points, hasData: true };
   }, [data]);
 
-  // 手書き風の波パスを生成（ボイリングエフェクト込み）
+  // サーファー位置の補間計算（worklet）
+  const surferState = useDerivedValue(() => {
+    if (wavePoints.length < 2) return { x: PADDING, y: CHART_HEIGHT / 2, angle: 0, scale: 1 };
+
+    const progress = animationProgress.value;
+    const totalPoints = wavePoints.length - 1;
+    const exactIndex = progress * totalPoints;
+    const lowerIndex = Math.floor(exactIndex);
+    const upperIndex = Math.min(lowerIndex + 1, totalPoints);
+    const t = exactIndex - lowerIndex;
+
+    const p1 = wavePoints[lowerIndex];
+    const p2 = wavePoints[upperIndex];
+
+    const x = p1.x + (p2.x - p1.x) * t;
+    const y = p1.y + (p2.y - p1.y) * t;
+
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    const avgValue = (p1.value + p2.value) / 2;
+    const scale = 0.8 + (avgValue / 5) * 0.4;
+
+    // 手書き風の揺れ（60fpsでスムーズ）
+    const wobbleX = Math.sin(progress * Math.PI * 12) * 2;
+    const wobbleY = Math.cos(progress * Math.PI * 8) * 3;
+
+    return { x: x + wobbleX, y: y + wobbleY - 5, angle: angle * 0.4, scale };
+  }, [wavePoints]);
+
+  // 波しぶきを追加するコールバック
+  const addSplash = useCallback((x: number, y: number) => {
+    splashIdRef.current += 1;
+    setSplashes(prev => [...prev.slice(-5), { id: splashIdRef.current, x, y }]);
+    // 1秒後に削除
+    setTimeout(() => {
+      setSplashes(prev => prev.slice(1));
+    }, 1000);
+  }, []);
+
+  // アニメーション開始
+  const startAnimation = useCallback(() => {
+    animationProgress.value = 0;
+    isAnimating.value = true;
+
+    animationProgress.value = withTiming(1, {
+      duration: ANIMATION_DURATION,
+      easing: Easing.inOut(Easing.quad),
+    }, (finished) => {
+      if (finished) {
+        isAnimating.value = false;
+      }
+    });
+  }, []);
+
+  // メインループアニメーション
+  useEffect(() => {
+    if (!hasData) return;
+
+    // サーファーアニメーションループ
+    const loopSurfer = () => {
+      animationProgress.value = 0;
+      isAnimating.value = true;
+
+      animationProgress.value = withTiming(1, {
+        duration: ANIMATION_DURATION,
+        easing: Easing.inOut(Easing.quad),
+      }, (finished) => {
+        if (finished) {
+          isAnimating.value = false;
+          // ループを継続
+          runOnJS(setTimeout)(() => {
+            loopSurfer();
+          }, 2500);
+        }
+      });
+    };
+
+    // ボイリングエフェクト（常時60fpsで動作）
+    boilingFrame.value = withRepeat(
+      withTiming(100, { duration: 3000, easing: Easing.linear }),
+      -1,
+      false
+    );
+
+    // 雲の移動
+    cloudOffset.value = withRepeat(
+      withTiming(CHART_WIDTH + 100, { duration: 20000, easing: Easing.linear }),
+      -1,
+      false
+    );
+
+    // カモメの移動
+    seagullOffset.value = withRepeat(
+      withTiming(CHART_WIDTH + 80, { duration: 15000, easing: Easing.linear }),
+      -1,
+      false
+    );
+
+    if (showSurfer) {
+      setTimeout(loopSurfer, 500);
+    }
+  }, [hasData, showSurfer]);
+
+  // 波しぶき生成（進行に合わせて）
+  useEffect(() => {
+    if (!hasData || !showSurfer) return;
+
+    const interval = setInterval(() => {
+      if (isAnimating.value && Math.random() > 0.7) {
+        const state = surferState.value;
+        addSplash(state.x - 10, state.y + 15);
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [hasData, showSurfer, addSplash]);
+
+  // 手書き風の波パスを生成
   const getHandDrawnWavePath = useCallback((frame: number) => {
     if (wavePoints.length < 2) return '';
 
-    // シード値としてフレーム番号を使用して、一貫性のあるランダム性を生成
     const seed = frame * 0.1;
     const wobbleIntensity = 3;
 
@@ -173,140 +289,13 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
     return path;
   }, [wavePoints]);
 
-  // サーファー位置と角度を計算
-  const getSurferState = useCallback((progress: number) => {
-    if (wavePoints.length < 2) return { x: 0, y: 0, angle: 0, scale: 1 };
+  // 波パスのアニメーション
+  const [currentBoilingFrame, setCurrentBoilingFrame] = React.useState(0);
 
-    const totalPoints = wavePoints.length - 1;
-    const exactIndex = progress * totalPoints;
-    const lowerIndex = Math.floor(exactIndex);
-    const upperIndex = Math.min(lowerIndex + 1, totalPoints);
-    const t = exactIndex - lowerIndex;
-
-    const p1 = wavePoints[lowerIndex];
-    const p2 = wavePoints[upperIndex];
-
-    const x = p1.x + (p2.x - p1.x) * t;
-    const y = p1.y + (p2.y - p1.y) * t;
-
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-    const avgValue = (p1.value + p2.value) / 2;
-    const scale = 0.8 + (avgValue / 5) * 0.4;
-
-    // 手書き風の揺れ
-    const wobbleX = Math.sin(progress * Math.PI * 12) * 2;
-    const wobbleY = Math.cos(progress * Math.PI * 8) * 3;
-
-    return { x: x + wobbleX, y: y + wobbleY - 5, angle: angle * 0.4, scale };
-  }, [wavePoints]);
-
-  // アニメーション開始
-  const startAnimation = () => {
-    animationProgress.setValue(0);
-    setIsAnimating(true);
-    setSplashes([]);
-
-    Animated.timing(animationProgress, {
-      toValue: 1,
-      duration: ANIMATION_DURATION,
-      easing: Easing.inOut(Easing.quad),
-      useNativeDriver: false,
-    }).start(() => {
-      setIsAnimating(false);
-    });
-  };
-
-  // メインループアニメーション
-  useEffect(() => {
-    if (!hasData) return;
-
-    // サーファーアニメーション
-    const loopSurfer = () => {
-      animationProgress.setValue(0);
-      setIsAnimating(true);
-      Animated.timing(animationProgress, {
-        toValue: 1,
-        duration: ANIMATION_DURATION,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: false,
-      }).start(() => {
-        setIsAnimating(false);
-        setTimeout(loopSurfer, 2500);
-      });
-    };
-
-    // ボイリングエフェクト（常に微妙に動く）
-    const loopBoiling = () => {
-      Animated.loop(
-        Animated.timing(boilingAnim, {
-          toValue: 100,
-          duration: 3000,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        })
-      ).start();
-    };
-
-    if (showSurfer) {
-      setTimeout(loopSurfer, 500);
-    }
-    loopBoiling();
-  }, [hasData, showSurfer]);
-
-  // アニメーション値のリスナー
-  useEffect(() => {
-    const surferListener = animationProgress.addListener(({ value }) => {
-      const state = getSurferState(value);
-      setSurferPos({ x: state.x, y: state.y });
-      setSurferAngle(state.angle);
-      setSurferScale(state.scale);
-
-      // 波しぶきを生成（物理演算付き）
-      if (isAnimating && Math.random() > 0.6) {
-        const angle = (Math.random() - 0.5) * Math.PI;
-        const speed = 2 + Math.random() * 3;
-        setSplashes(prev => [
-          ...prev.slice(-12),
-          {
-            x: state.x - 10 + Math.random() * 5,
-            y: state.y + 15,
-            size: 2 + Math.random() * 4,
-            opacity: 1,
-            vx: Math.cos(angle) * speed - 2,
-            vy: Math.sin(angle) * speed - 3,
-          }
-        ]);
-      }
-    });
-
-    const boilingListener = boilingAnim.addListener(({ value }) => {
-      setBoilingFrame(value);
-    });
-
-    return () => {
-      animationProgress.removeListener(surferListener);
-      boilingAnim.removeListener(boilingListener);
-    };
-  }, [wavePoints, isAnimating, getSurferState]);
-
-  // 波しぶきの物理演算
   useEffect(() => {
     const interval = setInterval(() => {
-      setSplashes(prev =>
-        prev
-          .map(s => ({
-            ...s,
-            x: s.x + s.vx,
-            y: s.y + s.vy,
-            vy: s.vy + 0.3, // 重力
-            opacity: s.opacity - 0.05,
-          }))
-          .filter(s => s.opacity > 0)
-      );
-    }, 40);
+      setCurrentBoilingFrame(f => (f + 1) % 100);
+    }, 50); // 20fps for wave path updates
     return () => clearInterval(interval);
   }, []);
 
@@ -322,8 +311,11 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
     );
   }
 
-  const wavePath = getHandDrawnWavePath(boilingFrame);
-  const wavePathOverlay = getHandDrawnWavePath(boilingFrame + 50);
+  const wavePath = getHandDrawnWavePath(currentBoilingFrame);
+  const wavePathOverlay = getHandDrawnWavePath(currentBoilingFrame + 50);
+
+  // サーファーの現在位置を取得
+  const currentSurferState = surferState.value;
 
   return (
     <View style={styles.container}>
@@ -347,42 +339,42 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
 
           {/* 手書き風の太陽 */}
           <G>
-            <SketchyCircle cx={CHART_WIDTH - 55} cy={40} r={22} fill="#FFE566" stroke="#FFCC00" strokeWidth={2} wobble={3} />
+            <SketchyCircle cx={CHART_WIDTH - 55} cy={40} r={22} fill="#FFE566" stroke="#FFCC00" strokeWidth={2} seed={currentBoilingFrame} />
             {/* 太陽の光線（手書き風） */}
             {[0, 40, 80, 120, 160, 200, 240, 280, 320].map((angle, i) => (
               <SketchyLine
                 key={i}
-                x1={CHART_WIDTH - 55 + Math.cos(angle * Math.PI / 180 + boilingFrame * 0.02) * 28}
-                y1={40 + Math.sin(angle * Math.PI / 180 + boilingFrame * 0.02) * 28}
-                x2={CHART_WIDTH - 55 + Math.cos(angle * Math.PI / 180 + boilingFrame * 0.02) * 38}
-                y2={40 + Math.sin(angle * Math.PI / 180 + boilingFrame * 0.02) * 38}
+                x1={CHART_WIDTH - 55 + Math.cos((angle + currentBoilingFrame * 2) * Math.PI / 180) * 28}
+                y1={40 + Math.sin((angle + currentBoilingFrame * 2) * Math.PI / 180) * 28}
+                x2={CHART_WIDTH - 55 + Math.cos((angle + currentBoilingFrame * 2) * Math.PI / 180) * 38}
+                y2={40 + Math.sin((angle + currentBoilingFrame * 2) * Math.PI / 180) * 38}
                 stroke="#FFCC00"
                 strokeWidth={2}
-                wobble={2}
+                seed={i + currentBoilingFrame}
               />
             ))}
           </G>
 
-          {/* 手書き風の雲 */}
-          <G transform={`translate(${(boilingFrame * 2) % (CHART_WIDTH + 100) - 50}, 0)`}>
-            <SketchyCircle cx={20} cy={30} r={12} fill="#FFFFFF" stroke="#DDD" strokeWidth={1} wobble={2} />
-            <SketchyCircle cx={38} cy={25} r={16} fill="#FFFFFF" stroke="#DDD" strokeWidth={1} wobble={2} />
-            <SketchyCircle cx={56} cy={30} r={12} fill="#FFFFFF" stroke="#DDD" strokeWidth={1} wobble={2} />
+          {/* 手書き風の雲（スムーズに移動） */}
+          <G transform={`translate(${(currentBoilingFrame * 2) % (CHART_WIDTH + 100) - 50}, 0)`}>
+            <SketchyCircle cx={20} cy={30} r={12} fill="#FFFFFF" stroke="#DDD" strokeWidth={1} seed={1} />
+            <SketchyCircle cx={38} cy={25} r={16} fill="#FFFFFF" stroke="#DDD" strokeWidth={1} seed={2} />
+            <SketchyCircle cx={56} cy={30} r={12} fill="#FFFFFF" stroke="#DDD" strokeWidth={1} seed={3} />
           </G>
 
           {/* カモメ（手書き風） */}
-          <G transform={`translate(${(boilingFrame * 3) % (CHART_WIDTH + 80) - 40}, ${25 + Math.sin(boilingFrame * 0.1) * 8})`}>
+          <G transform={`translate(${(currentBoilingFrame * 3) % (CHART_WIDTH + 80) - 40}, ${25 + Math.sin(currentBoilingFrame * 0.1) * 8})`}>
             <Path
-              d={`M 0 0 Q ${5 + getWobble(1)} ${-5 + getWobble(1)} 10 0 Q ${15 + getWobble(1)} ${-5 + getWobble(1)} 20 0`}
+              d={`M 0 0 Q 5 -5 10 0 Q 15 -5 20 0`}
               stroke="#444"
               strokeWidth={2}
               fill="none"
               strokeLinecap="round"
             />
           </G>
-          <G transform={`translate(${((boilingFrame * 3) + 100) % (CHART_WIDTH + 80) - 40}, ${40 + Math.sin(boilingFrame * 0.12) * 6})`}>
+          <G transform={`translate(${((currentBoilingFrame * 3) + 100) % (CHART_WIDTH + 80) - 40}, ${40 + Math.sin(currentBoilingFrame * 0.12) * 6})`}>
             <Path
-              d={`M 0 0 Q ${4 + getWobble(1)} ${-4 + getWobble(1)} 8 0 Q ${12 + getWobble(1)} ${-4 + getWobble(1)} 16 0`}
+              d={`M 0 0 Q 4 -4 8 0 Q 12 -4 16 0`}
               stroke="#666"
               strokeWidth={1.5}
               fill="none"
@@ -421,17 +413,17 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
           {/* 波頭の泡（手書き風） */}
           {wavePoints.map((point, i) => {
             if (point.value > 0) {
-              const wobbleOffset = Math.sin(boilingFrame * 0.1 + i) * 3;
+              const wobbleOffset = Math.sin(currentBoilingFrame * 0.1 + i) * 3;
               return (
                 <G key={`foam-${i}`}>
                   <SketchyCircle
                     cx={point.x + wobbleOffset}
-                    cy={point.y - 8 + Math.cos(boilingFrame * 0.1 + i) * 2}
+                    cy={point.y - 8 + Math.cos(currentBoilingFrame * 0.1 + i) * 2}
                     r={4}
                     fill="#FFFFFF"
                     stroke="#DDD"
                     strokeWidth={1}
-                    wobble={2}
+                    seed={i * 10 + currentBoilingFrame}
                   />
                   <SketchyCircle
                     cx={point.x + 8 + wobbleOffset}
@@ -440,7 +432,7 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
                     fill="#FFFFFF"
                     stroke="#EEE"
                     strokeWidth={1}
-                    wobble={1.5}
+                    seed={i * 10 + 5 + currentBoilingFrame}
                   />
                 </G>
               );
@@ -448,29 +440,15 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
             return null;
           })}
 
-          {/* 波しぶき（手書き風・物理演算） */}
-          {splashes.map((splash, i) => (
-            <SketchyCircle
-              key={`splash-${i}`}
-              cx={splash.x}
-              cy={splash.y}
-              r={splash.size}
-              fill="#FFFFFF"
-              stroke="#DDD"
-              strokeWidth={0.5}
-              wobble={1}
-            />
-          ))}
-
           {/* 水面のキラキラ（手書き風） */}
           {[...Array(5)].map((_, i) => {
-            const sparkleX = PADDING + 30 + ((boilingFrame * 2 + i * 60) % (CHART_WIDTH - PADDING * 2));
-            const sparkleY = SKY_HEIGHT + PADDING + 20 + Math.sin(boilingFrame * 0.1 + i) * 30;
-            const opacity = (Math.sin(boilingFrame * 0.15 + i * 2) + 1) / 2;
+            const sparkleX = PADDING + 30 + ((currentBoilingFrame * 2 + i * 60) % (CHART_WIDTH - PADDING * 2));
+            const sparkleY = SKY_HEIGHT + PADDING + 20 + Math.sin(currentBoilingFrame * 0.1 + i) * 30;
+            const opacity = (Math.sin(currentBoilingFrame * 0.15 + i * 2) + 1) / 2;
             return (
               <G key={`sparkle-${i}`} opacity={opacity}>
-                <SketchyLine x1={sparkleX - 4} y1={sparkleY} x2={sparkleX + 4} y2={sparkleY} stroke="#FFF" strokeWidth={2} wobble={1} />
-                <SketchyLine x1={sparkleX} y1={sparkleY - 4} x2={sparkleX} y2={sparkleY + 4} stroke="#FFF" strokeWidth={2} wobble={1} />
+                <SketchyLine x1={sparkleX - 4} y1={sparkleY} x2={sparkleX + 4} y2={sparkleY} stroke="#FFF" strokeWidth={2} seed={i * 100} />
+                <SketchyLine x1={sparkleX} y1={sparkleY - 4} x2={sparkleX} y2={sparkleY + 4} stroke="#FFF" strokeWidth={2} seed={i * 100 + 1} />
               </G>
             );
           })}
@@ -478,7 +456,7 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
           {/* クロミ風キャラクター（黒ウサギ）サーファー */}
           {showSurfer && (
             <G
-              transform={`translate(${surferPos.x}, ${surferPos.y}) rotate(${surferAngle}) scale(${surferScale})`}
+              transform={`translate(${currentSurferState.x}, ${currentSurferState.y}) rotate(${currentSurferState.angle}) scale(${currentSurferState.scale})`}
             >
               {/* 影 */}
               <Ellipse cx={0} cy={22} rx={22} ry={6} fill="#000" fillOpacity={0.15} />
@@ -492,14 +470,14 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
               />
               {/* サーフボードのドクロマーク風 */}
               <Circle cx={0} cy={10} r={3} fill="#333" />
-              <SketchyLine x1={-20} y1={10} x2={-8} y2={10} stroke="#333" strokeWidth={2} wobble={1} />
-              <SketchyLine x1={8} y1={10} x2={20} y2={10} stroke="#333" strokeWidth={2} wobble={1} />
+              <SketchyLine x1={-20} y1={10} x2={-8} y2={10} stroke="#333" strokeWidth={2} seed={100} />
+              <SketchyLine x1={8} y1={10} x2={20} y2={10} stroke="#333" strokeWidth={2} seed={101} />
 
               {/* ウサギの耳（黒フード風）- 左 */}
               <Path
                 d={`M -12 -25
-                   Q ${-14 + getWobble(1)} ${-45 + getWobble(2)} ${-8 + getWobble(1)} -50
-                   Q ${-2 + getWobble(1)} ${-48 + getWobble(1)} -4 -28`}
+                   Q -14 -45 -8 -50
+                   Q -2 -48 -4 -28`}
                 fill="#2D2D2D"
                 stroke="#1A1A1A"
                 strokeWidth={2}
@@ -507,8 +485,8 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
               {/* 耳の内側（ピンク）- 左 */}
               <Path
                 d={`M -10 -28
-                   Q ${-11 + getWobble(0.5)} ${-40 + getWobble(1)} ${-7 + getWobble(0.5)} -44
-                   Q ${-4 + getWobble(0.5)} ${-42 + getWobble(0.5)} -5 -30`}
+                   Q -11 -40 -7 -44
+                   Q -4 -42 -5 -30`}
                 fill="#FF69B4"
                 stroke="none"
               />
@@ -516,8 +494,8 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
               {/* ウサギの耳（黒フード風）- 右 */}
               <Path
                 d={`M 12 -25
-                   Q ${14 + getWobble(1)} ${-45 + getWobble(2)} ${8 + getWobble(1)} -50
-                   Q ${2 + getWobble(1)} ${-48 + getWobble(1)} 4 -28`}
+                   Q 14 -45 8 -50
+                   Q 2 -48 4 -28`}
                 fill="#2D2D2D"
                 stroke="#1A1A1A"
                 strokeWidth={2}
@@ -525,14 +503,14 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
               {/* 耳の内側（ピンク）- 右 */}
               <Path
                 d={`M 10 -28
-                   Q ${11 + getWobble(0.5)} ${-40 + getWobble(1)} ${7 + getWobble(0.5)} -44
-                   Q ${4 + getWobble(0.5)} ${-42 + getWobble(0.5)} 5 -30`}
+                   Q 11 -40 7 -44
+                   Q 4 -42 5 -30`}
                 fill="#FF69B4"
                 stroke="none"
               />
 
               {/* 顔（白） */}
-              <SketchyCircle cx={0} cy={-12} r={14} fill="#FFFFFF" stroke="#333" strokeWidth={2} wobble={2} />
+              <SketchyCircle cx={0} cy={-12} r={14} fill="#FFFFFF" stroke="#333" strokeWidth={2} seed={200} />
 
               {/* フード部分（黒・頭の上半分を覆う） */}
               <Path
@@ -559,13 +537,13 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
 
               {/* 眉毛（いたずらっぽく） */}
               <Path
-                d={`M -9 -18 Q -6 ${isAnimating ? -20 : -19} -2 -18`}
+                d={`M -9 -18 Q -6 ${isAnimating.value ? -20 : -19} -2 -18`}
                 stroke="#333"
                 strokeWidth={1.5}
                 fill="none"
               />
               <Path
-                d={`M 9 -18 Q 6 ${isAnimating ? -20 : -19} 2 -18`}
+                d={`M 9 -18 Q 6 ${isAnimating.value ? -20 : -19} 2 -18`}
                 stroke="#333"
                 strokeWidth={1.5}
                 fill="none"
@@ -573,7 +551,7 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
 
               {/* 口（ニヤリ） */}
               <Path
-                d={`M -4 -5 Q 0 ${isAnimating ? 0 : -2} 4 -5`}
+                d={`M -4 -5 Q 0 ${isAnimating.value ? 0 : -2} 4 -5`}
                 stroke="#333"
                 strokeWidth={2}
                 fill="none"
@@ -604,42 +582,42 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
               <SketchyLine
                 x1={-8}
                 y1={3}
-                x2={isAnimating ? -20 : -14}
-                y2={isAnimating ? -5 : 5}
+                x2={isAnimating.value ? -20 : -14}
+                y2={isAnimating.value ? -5 : 5}
                 stroke="#2D2D2D"
                 strokeWidth={5}
-                wobble={1}
+                seed={300}
               />
               <SketchyCircle
-                cx={isAnimating ? -22 : -16}
-                cy={isAnimating ? -6 : 6}
+                cx={isAnimating.value ? -22 : -16}
+                cy={isAnimating.value ? -6 : 6}
                 r={3}
                 fill="#FFF"
                 stroke="#333"
                 strokeWidth={1}
-                wobble={1}
+                seed={301}
               />
               <SketchyLine
                 x1={8}
                 y1={3}
-                x2={isAnimating ? 20 : 14}
-                y2={isAnimating ? -5 : 5}
+                x2={isAnimating.value ? 20 : 14}
+                y2={isAnimating.value ? -5 : 5}
                 stroke="#2D2D2D"
                 strokeWidth={5}
-                wobble={1}
+                seed={302}
               />
               <SketchyCircle
-                cx={isAnimating ? 22 : 16}
-                cy={isAnimating ? -6 : 6}
+                cx={isAnimating.value ? 22 : 16}
+                cy={isAnimating.value ? -6 : 6}
                 r={3}
                 fill="#FFF"
                 stroke="#333"
                 strokeWidth={1}
-                wobble={1}
+                seed={303}
               />
 
               {/* しっぽ（ピンクのポンポン） */}
-              <SketchyCircle cx={-5} cy={10} r={4} fill="#FF69B4" stroke="#FF1493" strokeWidth={1} wobble={2} />
+              <SketchyCircle cx={-5} cy={10} r={4} fill="#FF69B4" stroke="#FF1493" strokeWidth={1} seed={400} />
             </G>
           )}
 
@@ -650,8 +628,8 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
               return (
                 <SvgText
                   key={i}
-                  x={x + getWobble(1)}
-                  y={CHART_HEIGHT - 8 + getWobble(1)}
+                  x={x}
+                  y={CHART_HEIGHT - 8}
                   fontSize={11}
                   fill="#555"
                   textAnchor="middle"
@@ -675,11 +653,32 @@ export const SurfWave: React.FC<SurfWaveProps> = ({
                 fill="#FFF"
                 stroke="#2E8B84"
                 strokeWidth={2}
-                wobble={2}
+                seed={i * 1000}
               />
             )
           ))}
         </Svg>
+
+        {/* Lottie アニメーション（波しぶき） */}
+        {splashes.map((splash) => (
+          <View
+            key={splash.id}
+            style={{
+              position: 'absolute',
+              left: splash.x - 25,
+              top: splash.y - 25,
+              width: 50,
+              height: 50,
+            }}
+          >
+            <LottieView
+              source={require('../assets/animations/splash.json')}
+              autoPlay
+              loop={false}
+              style={{ width: 50, height: 50 }}
+            />
+          </View>
+        ))}
       </TouchableOpacity>
 
       <Text style={styles.hint}>タップで再スタート 🖤🐰</Text>
